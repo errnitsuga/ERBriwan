@@ -121,8 +121,10 @@ class _SplashScreenState extends State<SplashScreen>
         _phase == _SplashPhase.zoomTransition
         ? Colors.white
         : _blueBg;
+    final useBlueBg = _phase == _SplashPhase.logoWithProgress ||
+        _phase == _SplashPhase.getStarted;
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 800),
+      duration: useBlueBg ? Duration.zero : const Duration(milliseconds: 800),
       color: bgColor,
       child: Stack(
         fit: StackFit.expand,
@@ -190,7 +192,7 @@ class _SplashScreenState extends State<SplashScreen>
         child: Column(
           children: [
             SizedBox(height: MediaQuery.of(context).size.height * 0.08),
-            // Logo - higher on screen
+            // Logo - same position for both phases
             Expanded(
               flex: 4,
               child: FadeTransition(
@@ -211,12 +213,16 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
               ),
             ),
-            // Progress bar positioned exactly below logo content (minimal 8px spacing)
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 400),
-              child: showButton
-                  ? _buildGetStartedButton()
-                  : _buildProgressBar(),
+            const SizedBox(height: 8),
+            // Progress bar / GET STARTED - same slot, progress raised close to logo
+            SizedBox(
+              height: 72,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 400),
+                child: showButton
+                    ? _buildGetStartedButton()
+                    : _buildProgressBar(),
+              ),
             ),
             SizedBox(height: MediaQuery.of(context).size.height * 0.06),
           ],
