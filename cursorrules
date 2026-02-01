@@ -1,0 +1,55 @@
+Project Title: ERBriwan: Emergency Response Button for Everyone
+The ERBriwan mobile application serves as the central platform for sending and receiving emergency alerts integrated with a one-button emergency device. It enables users to transmit real-time location data and emergency type information to nearby registered responders, who can view alerts and navigate using a map-based interface. The application supports both sender and responder roles, ensuring fast, accurate, and coordinated emergency response.
+
+
+General Objective:
+	To develop an emergency response system that enables users to quickly send emergency alerts with their location using a single-button device integrated with a mobile application for faster and more efficient emergency response.
+Specific Objectives:
+To develop a mobile application that supports sender and responder roles through secure user and device registration.
+To develop an emergency classification mechanism where each number of button clicks corresponds to a specific type of emergency, and allows users to send emergency alerts based on multiple button clicks to reduce false alarms.
+To design live location tracking for the sender that is automatically transmitted to registered responders.
+To develop continuous location updates for responders to support coordination and navigation during emergencies.
+To directly notify the nearest available responders, such as police patrols, barangay tanods, or emergency personnel, based on the user’s active location.
+
+To design and develop a map-based interface that allows responders to view the sender’s exact location and enables the sender to view the location of nearby and active responders.
+To design an emergency alert history module for monitoring and documentation purposes.
+
+ PROPOSED SYSTEM FEATURES
+User and Device Registration
+Emergency Alert Activation and Classification
+Real-Time Location Tracking
+
+Map-Based Emergency Monitoring
+Instant Notifications to Responders
+Responder Coordination and Navigation
+Emergency Alert History and Logs
+User Accountability and Misuse Prevention
+
+
+Over all pages
+Opening page (contains logo)
+Wifi selection (contains every network detected)
+
+Sender page
+- Sender registration 
+
+Receiver page
+- receiver registration 
+- maps
+- history
+
+Wifi selection
+- makikita nyo list nung networks parang sa cp nyo lang, yung network list is ipoprovide nung webserver (esp32)
+
+Para saan? Para sa storage ng encryption keys sa database. Once lang coconnect yung user side sa database (during activation or registration). Yung receiver side naman, always connected sa wifi para ma access yung encryption key sa database.
+
+Sender registration 
+- register yung sender, kumukuha details like selfie, id, and info nya like bday, fill name, address, and contact. Dagdagan nyo pa if may di ako nalagay na important information
+Receiver registration 
+- same lang sa sender registration pero sa receiver side. Dagdag kayo extra info like anong type ng rescuer sya? Policeman ba or tanod or firefighter or kahit ano
+
+Map
+- makikita nya current location nya (nung mismong receiver) then makikita nya rin yung location nung sender na nag click nung button. May path din dapat papunta sa sender ah
+
+History
+- history lang nung mga pumindot ng buttons, yun lang
