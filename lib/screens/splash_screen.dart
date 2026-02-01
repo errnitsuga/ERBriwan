@@ -1,8 +1,19 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'home_page.dart';
 
-/// Animated splash/opening screen for ERBriwan app
+/// Intro animation phases:
+/// 0: White bg + small blue finger (3 sec)
+/// 1: Zoom in, blue covers screen
+/// 2: Logo fades in with progress bar
+/// 3: Progress completes, show GET STARTED
+enum _SplashPhase {
+  fingerIntro,
+  zoomTransition,
+  logoWithProgress,
+  getStarted,
+}
+
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -11,21 +22,71 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
+    with TickerProviderStateMixin {
+  static const _blueBg = Color(0xFF278CBD);
+  static const _orangeAccent = Color(0xFFFF9800);
+
+  _SplashPhase _phase = _SplashPhase.fingerIntro;
+  late AnimationController _zoomController;
+  late AnimationController _logoController;
+  late AnimationController _progressController;
+  late AnimationController _getStartedController;
+  Timer? _phaseTimer;
 
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
+
+    _zoomController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    )..repeat(reverse: true);
+      duration: const Duration(milliseconds: 1200),
+    );
+
+    _logoController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+
+    _progressController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2500),
+    );
+
+    _getStartedController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+
+    _startSequence();
+  }
+
+  void _startSequence() {
+    // Phase 0: Finger intro for 3 seconds
+    _phaseTimer = Timer(const Duration(seconds: 3), () {
+      if (!mounted) return;
+      setState(() => _phase = _SplashPhase.zoomTransition);
+      _zoomController.forward().then((_) {
+        if (!mounted) return;
+        setState(() => _phase = _SplashPhase.logoWithProgress);
+        _logoController.forward().then((_) {
+          if (!mounted) return;
+          _progressController.forward().then((_) {
+            if (!mounted) return;
+            setState(() => _phase = _SplashPhase.getStarted);
+            _getStartedController.forward();
+          });
+        });
+      });
+    });
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
+    _phaseTimer?.cancel();
+    _zoomController.dispose();
+    _logoController.dispose();
+    _progressController.dispose();
+    _getStartedController.dispose();
     super.dispose();
   }
 
@@ -33,7 +94,7 @@ class _SplashScreenState extends State<SplashScreen>
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            const HomePage(),
+        const HomePage(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(
             opacity: animation,
@@ -56,190 +117,194 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    const blueBg = Color(0xFF2196F3);
-    const orangeAccent = Color(0xFFFF9800);
+    final bgColor = _phase == _SplashPhase.fingerIntro ||
+        _phase == _SplashPhase.zoomTransition
+        ? Colors.white
+        : _blueBg;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 800),
+      color: bgColor,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Phase 0: Small blue finger
+          if (_phase == _SplashPhase.fingerIntro) _buildFingerIntro(),
 
-    return Scaffold(
-      backgroundColor: blueBg,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            children: [
-              const Spacer(flex: 2),
-              // Central brand icon with hand + emergency bell
-              _BrandIcon(pulseController: _pulseController)
-                  .animate()
-                  .scale(
-                    begin: const Offset(0.5, 0.5),
-                    end: const Offset(1, 1),
-                    duration: 600.ms,
-                    curve: Curves.elasticOut,
-                  )
-                  .fadeIn(duration: 500.ms),
-              const SizedBox(height: 24),
-              // App name
-              Text(
-                'ERBriwan',
-                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
-              )
-                  .animate()
-                  .fadeIn(delay: 200.ms, duration: 500.ms)
-                  .slideY(begin: 0.3, end: 0, curve: Curves.easeOut),
-              const SizedBox(height: 8),
-              // Tagline
-              Text(
-                'Emergency Response Button for Everyone',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.white.withOpacity(0.95),
-                      fontWeight: FontWeight.w400,
-                    ),
-              )
-                  .animate()
-                  .fadeIn(delay: 400.ms, duration: 500.ms)
-                  .slideY(begin: 0.2, end: 0, curve: Curves.easeOut),
-              const SizedBox(height: 32),
-              // Feature icons row
-              _FeatureIconsRow()
-                  .animate()
-                  .fadeIn(delay: 600.ms, duration: 400.ms)
-                  .scale(begin: const Offset(0.8, 0.8), end: const Offset(1, 1)),
-              const Spacer(flex: 3),
-              // Get Started button
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _onGetStarted,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: orangeAccent,
-                    foregroundColor: Colors.white,
-                    elevation: 4,
-                    shadowColor: orangeAccent.withOpacity(0.5),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: Text(
-                    'GET STARTED',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ),
-              )
-                  .animate()
-                  .fadeIn(delay: 800.ms, duration: 500.ms)
-                  .slideY(begin: 0.5, end: 0, curve: Curves.easeOutBack),
-              const SizedBox(height: 40),
-            ],
-          ),
-        ),
+          // Phase 1: Zoom transition
+          if (_phase == _SplashPhase.zoomTransition) _buildZoomTransition(),
+
+          // Phase 2 & 3: Logo + progress or GET STARTED
+          if (_phase == _SplashPhase.logoWithProgress ||
+              _phase == _SplashPhase.getStarted)
+            _buildLogoAndButton(),
+        ],
       ),
     );
   }
-}
 
-/// Brand icon: hand pressing emergency bell with orange ring
-class _BrandIcon extends StatelessWidget {
-  final AnimationController pulseController;
+  Widget _buildFingerIntro() {
+    return Center(
+      child: Icon(
+        Icons.touch_app,
+        size: 80,
+        color: _blueBg,
+      ),
+    );
+  }
 
-  const _BrandIcon({required this.pulseController});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildZoomTransition() {
     return AnimatedBuilder(
-      animation: pulseController,
+      animation: _zoomController,
       builder: (context, child) {
-        final glow = 1.0 + (pulseController.value * 0.08);
-        return Container(
-          width: 120,
-          height: 120,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: const Color(0xFFFF9800),
-              width: 4,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFFF9800).withOpacity(0.4),
-                blurRadius: 20 * glow,
-                spreadRadius: 2 * glow,
+        final curve = Curves.easeInOutCubic.transform(_zoomController.value);
+        final scale = 1.0 + (curve * 20);
+        return Center(
+          child: Transform.scale(
+            scale: scale,
+            child: Container(
+              width: 100,
+              height: 100,
+              decoration: const BoxDecoration(
+                color: _blueBg,
+                shape: BoxShape.circle,
               ),
-            ],
-          ),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Emergency bell/siren icon at top
-              Positioned(
-                top: 18,
-                child: Icon(
-                  Icons.emergency,
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
-              // Hand tap icon
-              Icon(
+              alignment: Alignment.center,
+              child: Icon(
                 Icons.touch_app,
-                color: Colors.white,
-                size: 48,
+                size: 60,
+                color: _blueBg,
               ),
-            ],
+            ),
           ),
         );
       },
     );
   }
-}
 
-/// Feature icons: location, smartphone alert, ambulance
-class _FeatureIconsRow extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.location_on_outlined, color: Colors.white, size: 28),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              Container(
-                width: 24,
-                height: 2,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(1),
+  Widget _buildLogoAndButton() {
+    final showButton = _phase == _SplashPhase.getStarted;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          children: [
+            SizedBox(height: MediaQuery.of(context).size.height * 0.08),
+            // Logo - higher on screen
+            Expanded(
+              flex: 4,
+              child: FadeTransition(
+                opacity: _logoController,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    fit: BoxFit.contain,
+                    width: double.infinity,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: Colors.white.withOpacity(0.2),
+                      child: const Center(
+                        child: Icon(Icons.image, size: 64, color: Colors.white54),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              Icon(Icons.smartphone, color: Colors.white, size: 28),
-              Icon(Icons.error_outline, color: Colors.white, size: 16),
-            ],
+            ),
+            // Progress bar positioned exactly below logo content (minimal 8px spacing)
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              child: showButton
+                  ? _buildGetStartedButton()
+                  : _buildProgressBar(),
+            ),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProgressBar() {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_logoController, _progressController]),
+      builder: (context, child) {
+        return Opacity(
+          opacity: _logoController.value,
+          child: SizedBox(
+            key: const ValueKey('progress'),
+            width: double.infinity,
+            height: 6,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                backgroundColor: Colors.white.withOpacity(0.3),
+                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                value: _progressController.value,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGetStartedButton() {
+    return FadeTransition(
+      opacity: _getStartedController,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.3),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(
+          parent: _getStartedController,
+          curve: Curves.easeOutCubic,
+        )),
+        child: Container(
+          key: const ValueKey('button'),
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 8),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _onGetStarted,
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      _orangeAccent,
+                      Color.lerp(_orangeAccent, Colors.deepOrange, 0.2)!,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _orangeAccent.withOpacity(0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Text(
+                    'GET STARTED',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
-        Container(
-          width: 24,
-          height: 2,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.5),
-            borderRadius: BorderRadius.circular(1),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Icon(Icons.local_hospital_outlined, color: Colors.white, size: 28),
-        ),
-      ],
+      ),
     );
   }
 }
