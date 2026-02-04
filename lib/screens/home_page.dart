@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../data/mock_connection_service.dart';
+import '../receiver/receiver_registration_page.dart';
+import '../sender/sender_registration_page.dart';
+import '../receiver/receiver_dashboard_page.dart';
+import '../sender/sender_dashboard_page.dart';
+import 'wifi_selection_page.dart';
+
 /// Home page - Welcome to ERBriwan with device overlay
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -163,7 +170,7 @@ class HomePage extends StatelessWidget {
                           icon: Icons.add,
                           label: 'Connect Device',
                           isPrimary: true,
-                          onTap: () {},
+                          onTap: () => _showConnectionPopup(context),
                         ),
                         const SizedBox(height: 16),
                         _ActionButton(
@@ -204,6 +211,133 @@ class HomePage extends StatelessWidget {
         child: Icon(Icons.emergency, color: Colors.white, size: 40),
       ),
     );
+  }
+
+  static void _showConnectionPopup(BuildContext context) {
+    bool deviceHasInternet = true;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Connection result (mock)'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Choose a scenario to simulate device connection:',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+                    CheckboxListTile(
+                      value: deviceHasInternet,
+                      onChanged: (v) =>
+                          setState(() => deviceHasInternet = v ?? true),
+                      title: const Text('Device has internet'),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    const SizedBox(height: 8),
+                    _ScenarioButton(
+                      label: 'Sender device connected with existing profile',
+                      onTap: () => _onScenarioSelected(
+                        context,
+                        ConnectionScenario.senderWithProfile,
+                        deviceHasInternet,
+                      ),
+                    ),
+                    _ScenarioButton(
+                      label: 'Receiver device connected with existing profile',
+                      onTap: () => _onScenarioSelected(
+                        context,
+                        ConnectionScenario.receiverWithProfile,
+                        deviceHasInternet,
+                      ),
+                    ),
+                    _ScenarioButton(
+                      label: 'Sender device connected without existing profile',
+                      onTap: () => _onScenarioSelected(
+                        context,
+                        ConnectionScenario.senderWithoutProfile,
+                        deviceHasInternet,
+                      ),
+                    ),
+                    _ScenarioButton(
+                      label: 'Receiver device connected without existing profile',
+                      onTap: () => _onScenarioSelected(
+                        context,
+                        ConnectionScenario.receiverWithoutProfile,
+                        deviceHasInternet,
+                      ),
+                    ),
+                    _ScenarioButton(
+                      label: 'No device detected – try again',
+                      onTap: () => _onScenarioSelected(
+                        context,
+                        ConnectionScenario.noDevice,
+                        deviceHasInternet,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  static void _onScenarioSelected(
+    BuildContext context,
+    ConnectionScenario scenario,
+    bool hasInternet,
+  ) {
+    Navigator.of(context).pop(); // close dialog
+    if (scenario == ConnectionScenario.noDevice) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(scenario.message)),
+      );
+      return;
+    }
+    // Show notification message then navigate
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(scenario.message),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    final Widget targetPage;
+    switch (scenario) {
+      case ConnectionScenario.senderWithProfile:
+        targetPage = const SenderDashboardPage(initialIndex: 0);
+        break;
+      case ConnectionScenario.receiverWithProfile:
+        targetPage = const ReceiverDashboardPage(initialIndex: 0);
+        break;
+      case ConnectionScenario.senderWithoutProfile:
+        targetPage = const SenderRegistrationPage();
+        break;
+      case ConnectionScenario.receiverWithoutProfile:
+        targetPage = const ReceiverRegistrationPage();
+        break;
+      case ConnectionScenario.noDevice:
+        return;
+    }
+    if (hasInternet) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => targetPage),
+      );
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => WifiSelectionPage(targetPage: targetPage),
+        ),
+      );
+    }
   }
 
   Widget _buildBackground(BuildContext context) {
@@ -254,6 +388,27 @@ class HomePage extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ScenarioButton extends StatelessWidget {
+  const _ScenarioButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: TextButton(
+        onPressed: onTap,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(label, style: const TextStyle(fontSize: 13)),
+        ),
+      ),
     );
   }
 }
@@ -314,3 +469,4 @@ class _ActionButton extends StatelessWidget {
     );
   }
 }
+
