@@ -11,7 +11,9 @@ class HomePage extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
+          // Background with clear color division
           _buildBackground(context),
+
           // Semi-transparent location pin overlay
           Positioned(
             right: -40,
@@ -22,121 +24,160 @@ class HomePage extends StatelessWidget {
               color: Colors.pink.withOpacity(0.25),
             ),
           ),
-          // Content
+
+          // Content with proper overlay positioning
           SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 20),
-                  // Top section: device image + Welcome text
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            child: Column(
+              children: [
+                // Top blue section - 50% of screen
+                Expanded(
+                  flex: 1,
+                  child: Stack(
                     children: [
-                      // Device image overlay
-                      Image.asset(
-                        'assets/images/erb-front.png',
-                        height: 140,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => _buildFallbackDevice(),
+                      // Centered device image
+                      Positioned(
+                        top: 0,
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Image.asset(
+                            'assets/images/erb-front.png',
+                            height: 400,
+                            width: 400,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => _buildFallbackDevice(),
+                          ),
+                        ),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Welcome',
-                              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                            ),
-                            Text(
-                              'to',
-                              style: TextStyle(
-                                fontSize: 20,
-                                color: Colors.white.withOpacity(0.9),
+
+                      // Welcome text overlay
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              const SizedBox(height: 32),
+                              Text(
+                                'Welcome',
+                                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 40,
+                                ),
                               ),
-                            ),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text(
-                                  'ER',
-                                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'to',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  color: Colors.white.withOpacity(0.9),
                                 ),
-                                Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.orange, width: 2),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'ER',
+                                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 40,
+                                    ),
                                   ),
-                                  child: Icon(Icons.touch_app, size: 16, color: Colors.white),
-                                ),
-                                Text(
-                                  'biwan',
-                                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Emergency Response Button for Everyone',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.white.withOpacity(0.9),
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Colors.orange, width: 2),
+                                    ),
+                                    child: Icon(Icons.touch_app, size: 16, color: Colors.white),
                                   ),
-                            ),
-                          ],
+                                  Text(
+                                    'Briwan',
+                                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 40,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Emergency Response Button for Everyone',
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.white.withOpacity(0.9),
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Safety, Simplified.',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
+                ),
+
+                // Bottom section with text and buttons
+                Expanded(
+                  flex: 1,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Safety, Simplified.',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 24,
+                          ),
                         ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'One press to alert help.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white.withOpacity(0.9),
+                        const SizedBox(height: 12),
+                        Text(
+                          'One press to alert help.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 18,
+                          ),
                         ),
-                  ),
-                  Text(
-                    'Designed wherever you go.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white.withOpacity(0.9),
+                        Text(
+                          'Designed wherever you go.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 18,
+                          ),
                         ),
+                        const Spacer(),
+                        _ActionButton(
+                          icon: Icons.add,
+                          label: 'Connect Device',
+                          isPrimary: true,
+                          onTap: () {},
+                        ),
+                        const SizedBox(height: 16),
+                        _ActionButton(
+                          icon: Icons.accessibility_new,
+                          label: 'View Instructions',
+                          isPrimary: false,
+                          onTap: () {},
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
                   ),
-                  const Spacer(),
-                  _ActionButton(
-                    icon: Icons.add,
-                    label: 'Connect Device',
-                    isPrimary: true,
-                    onTap: () {},
-                  ),
-                  const SizedBox(height: 12),
-                  _ActionButton(
-                    icon: Icons.accessibility_new,
-                    label: 'View Instructions',
-                    isPrimary: false,
-                    onTap: () {},
-                  ),
-                  const SizedBox(height: 32),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],
@@ -146,8 +187,8 @@ class HomePage extends StatelessWidget {
 
   Widget _buildFallbackDevice() {
     return Container(
-      width: 100,
-      height: 140,
+      width: 400,
+      height: 400,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(
@@ -168,18 +209,16 @@ class HomePage extends StatelessWidget {
   Widget _buildBackground(BuildContext context) {
     return Column(
       children: [
-        // Blue header (~42%)
+        // Blue header (50%)
         Expanded(
-          flex: 42,
           child: Container(
             decoration: BoxDecoration(
               color: _blueHeader,
             ),
           ),
         ),
-        // Blurred cityscape (~58%)
+        // Blurred cityscape (50%)
         Expanded(
-          flex: 58,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -264,7 +303,7 @@ class _ActionButton extends StatelessWidget {
                 label,
                 style: TextStyle(
                   color: isPrimary ? Colors.white : blue,
-                  fontSize: 16,
+                  fontSize: 18,
                   fontWeight: FontWeight.w600,
                 ),
               ),
