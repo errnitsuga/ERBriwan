@@ -1,8 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- WiFi scanning requires location / nearby permissions on Android -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <!-- Android 13+ -->
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+
     <application
         android:label="ERBriwan"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -30,6 +39,11 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Google Maps API key (Android) -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyCKGMtopEHmzw4-SxWm1c8VqiFdnO_FtMM" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
