@@ -1,8 +1,12 @@
-import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:wifi_scan/wifi_scan.dart';
+import 'dart:convert';
 
-/// WiFi selection page when device is not connected to internet.
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+import '../receiver/receiver_dashboard_page.dart';
+import '../sender/sender_dashboard_page.dart';
+
+/// WiFi selection page - shows networks detected by the device.
 class WifiSelectionPage extends StatefulWidget {
   const WifiSelectionPage({super.key, this.targetPage});
 
@@ -14,7 +18,9 @@ class WifiSelectionPage extends StatefulWidget {
 }
 
 class _WifiSelectionPageState extends State<WifiSelectionPage> {
-  List<WiFiAccessPoint> _accessPoints = const [];
+  static const _deviceBaseUrl = 'http://192.168.4.1:80';
+
+  List<_NetworkInfo> _networks = const [];
   bool _loading = false;
   String? _error;
 
@@ -31,61 +37,151 @@ class _WifiSelectionPageState extends State<WifiSelectionPage> {
     });
 
     try {
-      // Location permission is required to scan WiFi SSIDs on Android.
-      final status = await Permission.locationWhenInUse.request();
-      if (!status.isGranted) {
+      final uri = Uri.parse('$_deviceBaseUrl/detectNetworks');
+      final res = await http.get(uri).timeout(
+        const Duration(seconds: 12),
+        onTimeout: () => throw Exception(
+          'Request timed out. Ensure your phone is connected to the ERBriwan WiFi.',
+        ),
+      );
+
+      if (res.statusCode != 200) {
         setState(() {
           _error =
-              'Location permission is required to scan nearby WiFi networks.';
+              'Device returned ${res.statusCode}. Ensure phone is on ERBriwan WiFi.';
           _loading = false;
         });
         return;
       }
 
-      final can = await WiFiScan.instance.canStartScan();
-      if (can != CanStartScan.yes) {
+      final body = res.body.trim();
+      if (body.isEmpty) {
         setState(() {
-          _error =
-              'Cannot start WiFi scan: ${can.name}. Turn on WiFi and Location services.';
+          _error = 'Device returned empty response.';
           _loading = false;
         });
         return;
       }
 
-      await WiFiScan.instance.startScan();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      // Accept "networks" or "Networks", "isSecure" or "isSecure"
+      final List<dynamic> ssids = (json['networks'] ?? json['Networks'])
+          as List<dynamic>? ?? [];
+      final List<dynamic> secureFlags =
+          (json['isSecure'] ?? json['IsSecure']) as List<dynamic>? ?? [];
 
-      final canGet = await WiFiScan.instance.canGetScannedResults();
-      if (canGet != CanGetScannedResults.yes) {
-        setState(() {
-          _error =
-              'Cannot read WiFi scan results: ${canGet.name}.';
-          _loading = false;
-        });
-        return;
+      final List<_NetworkInfo> parsed = [];
+      for (var i = 0; i < ssids.length; i++) {
+        final ssid = (ssids[i] ?? '').toString();
+        final isSecure = i < secureFlags.length
+            ? (secureFlags[i] == true || secureFlags[i] == 1)
+            : false;
+        final strength = (3 - (i ~/ 2)).clamp(1, 3);
+        parsed.add(
+          _NetworkInfo(
+            ssid: ssid,
+            isSecure: isSecure,
+            strength: strength,
+          ),
+        );
       }
-
-      final results = await WiFiScan.instance.getScannedResults();
-      results.sort((a, b) => b.level.compareTo(a.level));
 
       setState(() {
-        _accessPoints = results;
+        _networks = parsed;
+        _loading = false;
+      });
+    } on Exception catch (e) {
+      final msg = e.toString();
+      final isTimeout = msg.contains('TimeoutException') ||
+          msg.contains('timed out') ||
+          msg.contains('future not completed');
+      setState(() {
+        _error = isTimeout
+            ? 'Request timed out. Make sure your phone is connected to the ERBriwan WiFi (device hotspot), then pull down to retry.'
+            : 'Failed to contact device: $msg';
         _loading = false;
       });
     } catch (e) {
       setState(() {
-        _error = 'Failed to scan WiFi networks: $e';
+        _error = 'Failed to contact device: $e';
         _loading = false;
       });
     }
   }
 
-  void _selectNetwork(WiFiAccessPoint ap) {
-    final navigator = Navigator.of(context);
-    final next = widget.targetPage;
-    navigator.pop();
-    if (next != null) {
-      navigator.push(MaterialPageRoute(builder: (_) => next));
-    }
+  void _onNetworkTap(_NetworkInfo network) {
+    showDialog<void>(
+      context: context,
+      builder: (_) {
+        final controller = TextEditingController();
+        final secure = network.isSecure;
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(network.ssid),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  _WifiStrengthIcon(strength: network.strength),
+                  const SizedBox(width: 8),
+                  if (secure)
+                    const Icon(Icons.lock, size: 18, color: Colors.black54)
+                  else
+                    const Text(
+                      'Open network',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (secure)
+                TextField(
+                  controller: controller,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    border: OutlineInputBorder(),
+                  ),
+                )
+              else
+                const Text(
+                  'No password required for this network.',
+                  style: TextStyle(fontSize: 13),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      secure
+                          ? 'Captured password for ${network.ssid} (mock only).'
+                          : 'Selected open network ${network.ssid} (mock only).',
+                    ),
+                  ),
+                );
+                final next = widget.targetPage;
+                if (next != null && mounted) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => next),
+                  );
+                }
+              },
+              child: const Text('Confirm'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -95,6 +191,47 @@ class _WifiSelectionPageState extends State<WifiSelectionPage> {
         title: const Text('WiFi Selection'),
         backgroundColor: const Color(0xFF2D92D2),
         foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () {
+            showModalBottomSheet<void>(
+              context: context,
+              builder: (_) {
+                return SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.person),
+                        title: const Text('Sender dashboard'),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const SenderDashboardPage(),
+                            ),
+                          );
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.phone_android),
+                        title: const Text('Receiver dashboard'),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ReceiverDashboardPage(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        ),
         actions: [
           IconButton(
             onPressed: _loading ? null : _refresh,
@@ -126,7 +263,7 @@ class _WifiSelectionPageState extends State<WifiSelectionPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Pull down to rescan. If you don’t see your hotspot, make sure WiFi + Location are ON.',
+              'Networks detected by ERBriwan device. Tap a WiFi to view details and enter password.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 16),
@@ -136,34 +273,30 @@ class _WifiSelectionPageState extends State<WifiSelectionPage> {
                 padding: EdgeInsets.symmetric(vertical: 24),
                 child: Center(child: CircularProgressIndicator()),
               )
-            else if (_error != null)
-              _ErrorCard(
-                message: _error!,
-                onOpenSettings: openAppSettings,
-                onRetry: _refresh,
-              )
-            else if (_accessPoints.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: Text('No networks found.')),
-              )
+
+
             else
-              ..._accessPoints.map((ap) {
-                final ssid = ap.ssid.trim();
-                final title = ssid.isEmpty ? '<Hidden SSID>' : ssid;
-                final level = ap.level;
+              ..._networks.map((net) {
+                final title =
+                    net.ssid.trim().isEmpty ? '<Hidden SSID>' : net.ssid;
                 return Card(
                   child: ListTile(
-                    leading: const Icon(Icons.wifi),
+                    leading: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _WifiStrengthIcon(strength: net.strength),
+                        if (net.isSecure)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 4),
+                            child: Icon(Icons.lock, size: 16),
+                          ),
+                      ],
+                    ),
                     title: Text(title),
                     subtitle: Text(
-                      [
-                        if (ap.capabilities.trim().isNotEmpty)
-                          ap.capabilities,
-                        'Signal: $level dBm',
-                      ].join(' • '),
+                      net.isSecure ? 'Secure network' : 'Open network',
                     ),
-                    onTap: () => _selectNetwork(ap),
+                    onTap: () => _onNetworkTap(net),
                   ),
                 );
               }),
@@ -171,6 +304,40 @@ class _WifiSelectionPageState extends State<WifiSelectionPage> {
         ),
       ),
     );
+  }
+}
+
+class _NetworkInfo {
+  _NetworkInfo({
+    required this.ssid,
+    required this.isSecure,
+    required this.strength,
+  });
+
+  final String ssid;
+  final bool isSecure;
+  final int strength; // 1–3 bars
+}
+
+class _WifiStrengthIcon extends StatelessWidget {
+  const _WifiStrengthIcon({required this.strength});
+
+  final int strength;
+
+  @override
+  Widget build(BuildContext context) {
+    IconData icon;
+    switch (strength.clamp(1, 3)) {
+      case 1:
+        icon = Icons.network_wifi_1_bar;
+        break;
+      case 2:
+        icon = Icons.network_wifi_2_bar;
+        break;
+      default:
+        icon = Icons.network_wifi_3_bar;
+    }
+    return Icon(icon);
   }
 }
 

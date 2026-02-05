@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
 
-import '../data/mock_connection_service.dart';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import '../receiver/receiver_registration_page.dart';
 import '../sender/sender_registration_page.dart';
 import '../receiver/receiver_dashboard_page.dart';
@@ -12,6 +13,7 @@ class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   static const _blueHeader = Color(0xFF2D92D2);
+  static const _deviceBaseUrl = 'http://192.168.4.1:80';
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +34,28 @@ class HomePage extends StatelessWidget {
             ),
           ),
 
+          // Top-left overlay: mockup menu to jump to sender/receiver
+          Positioned(
+            top: 0,
+            left: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Material(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(8),
+                  child: InkWell(
+                    onTap: () => _showMockNavigationPopup(context),
+                    borderRadius: BorderRadius.circular(8),
+                    child: const Padding(
+                      padding: EdgeInsets.all(10),
+                      child: Icon(Icons.menu, color: Color(0xFF2D92D2)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
           // Content with proper overlay positioning
           SafeArea(
             child: Column(
@@ -170,7 +194,7 @@ class HomePage extends StatelessWidget {
                           icon: Icons.add,
                           label: 'Connect Device',
                           isPrimary: true,
-                          onTap: () => _showConnectionPopup(context),
+                          onTap: () => _handleConnectDevice(context),
                         ),
                         const SizedBox(height: 16),
                         _ActionButton(
@@ -213,131 +237,367 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  static void _showConnectionPopup(BuildContext context) {
-    bool deviceHasInternet = true;
+  static Future<void> _handleConnectDevice(BuildContext context) async {
+    // Simple loading dialog while talking to ESP32.
     showDialog<void>(
       context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Connection result (mock)'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Choose a scenario to simulate device connection:',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                    const SizedBox(height: 16),
-                    CheckboxListTile(
-                      value: deviceHasInternet,
-                      onChanged: (v) =>
-                          setState(() => deviceHasInternet = v ?? true),
-                      title: const Text('Device has internet'),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    const SizedBox(height: 8),
-                    _ScenarioButton(
-                      label: 'Sender device connected with existing profile',
-                      onTap: () => _onScenarioSelected(
-                        context,
-                        ConnectionScenario.senderWithProfile,
-                        deviceHasInternet,
-                      ),
-                    ),
-                    _ScenarioButton(
-                      label: 'Receiver device connected with existing profile',
-                      onTap: () => _onScenarioSelected(
-                        context,
-                        ConnectionScenario.receiverWithProfile,
-                        deviceHasInternet,
-                      ),
-                    ),
-                    _ScenarioButton(
-                      label: 'Sender device connected without existing profile',
-                      onTap: () => _onScenarioSelected(
-                        context,
-                        ConnectionScenario.senderWithoutProfile,
-                        deviceHasInternet,
-                      ),
-                    ),
-                    _ScenarioButton(
-                      label: 'Receiver device connected without existing profile',
-                      onTap: () => _onScenarioSelected(
-                        context,
-                        ConnectionScenario.receiverWithoutProfile,
-                        deviceHasInternet,
-                      ),
-                    ),
-                    _ScenarioButton(
-                      label: 'No device detected – try again',
-                      onTap: () => _onScenarioSelected(
-                        context,
-                        ConnectionScenario.noDevice,
-                        deviceHasInternet,
-                      ),
-                    ),
-                  ],
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    bool? isSender;
+    try {
+      final typeRes = await http
+          .get(Uri.parse('$_deviceBaseUrl/type'))
+          .timeout(const Duration(seconds: 5));
+
+      if (typeRes.statusCode == 200) {
+        final body = typeRes.body.trim();
+        if (body.isNotEmpty) {
+          final data = jsonDecode(body) as Map<String, dynamic>;
+          // Device may return "sender": true/1 or "isSender": true/1
+          final raw = data['sender'] ?? data['isSender'];
+          if (raw != null) {
+            if (raw == true || raw == 1) {
+              isSender = true;
+            } else if (raw == false || raw == 0) {
+              isSender = false;
+            } else if (raw is String) {
+              final s = raw.toLowerCase();
+              if (s == 'true' || s == '1') isSender = true;
+              else if (s == 'false' || s == '0') isSender = false;
+            }
+          }
+        }
+      }
+    } catch (_) {
+      // fall-through to no-device popup
+    } finally {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(); // close loader
+      }
+    }
+
+    if (isSender == null) {
+      await _showNoDeviceDialog(context);
+      return;
+    }
+
+    final confirmed = await _showDeviceDetectedDialog(context, isSender);
+    if (confirmed != true) return;
+
+    // After confirm, check profile.
+    await _handleProfileFlow(context, isSender);
+  }
+
+  static Future<void> _handleProfileFlow(
+    BuildContext context,
+    bool isSender,
+  ) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    Map<String, dynamic>? profile;
+    try {
+      final res = await http
+          .get(Uri.parse('$_deviceBaseUrl/getProfile'))
+          .timeout(const Duration(seconds: 5));
+      if (res.statusCode == 200 && res.body.trim().isNotEmpty) {
+        profile = jsonDecode(res.body) as Map<String, dynamic>;
+      }
+    } catch (_) {
+      // treat as no profile from device
+    } finally {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(); // close loader
+      }
+    }
+
+    // Consider profile existing if we got any non-empty string field (fullname, address, etc.)
+    bool hasProfile = false;
+    if (profile != null) {
+      for (final v in profile.values) {
+        if (v is String && v.trim().isNotEmpty) {
+          hasProfile = true;
+          break;
+        }
+      }
+    }
+    // Mock profile: when getProfile fails or returns empty, still go to WiFi selection for testing
+    const useMockProfile = true;
+    if (!hasProfile && useMockProfile) {
+      hasProfile = true;
+    }
+
+    if (!hasProfile) {
+      await _showNoProfileDialog(context, isSender);
+      return;
+    }
+
+    // Existing profile (or mock) -> go to WiFi selection page.
+    if (!context.mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const WifiSelectionPage(),
+      ),
+    );
+  }
+
+  static void _showMockNavigationPopup(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Mock: Go to',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            );
-          },
+            ),
+            ListTile(
+              leading: const Icon(Icons.send_rounded),
+              title: const Text('Sender profile'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const SenderDashboardPage(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.phone_android_rounded),
+              title: const Text('Receiver profile'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ReceiverDashboardPage(),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Future<void> _showNoDeviceDialog(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          contentPadding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.phonelink_off,
+                  size: 48, color: Color(0xFF2D92D2)),
+              const SizedBox(height: 16),
+              const Text(
+                'No Device Connected',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Make sure your phone is connected to the ERBriwan network before trying again.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
   }
 
-  static void _onScenarioSelected(
+  static Future<bool?> _showDeviceDetectedDialog(
     BuildContext context,
-    ConnectionScenario scenario,
-    bool hasInternet,
+    bool isSender,
   ) {
-    Navigator.of(context).pop(); // close dialog
-    if (scenario == ConnectionScenario.noDevice) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(scenario.message)),
-      );
-      return;
-    }
-    // Show notification message then navigate
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(scenario.message),
-        duration: const Duration(seconds: 2),
-      ),
+    final titleText =
+        isSender ? 'Sender Device Detected' : 'Receiver Device Detected';
+    final subtitleText = isSender
+        ? 'Please confirm to proceed.'
+        : 'Please confirm to proceed.';
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 0),
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(24, 32, 24, 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF2D92D2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.smartphone,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    titleText,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    subtitleText,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF2D92D2),
+                          side: const BorderSide(color: Color(0xFF2D92D2)),
+                          minimumSize: const Size(110, 40),
+                        ),
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF2D92D2),
+                          minimumSize: const Size(110, 40),
+                        ),
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: const Text('Confirm'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
-    final Widget targetPage;
-    switch (scenario) {
-      case ConnectionScenario.senderWithProfile:
-        targetPage = const SenderDashboardPage(initialIndex: 0);
-        break;
-      case ConnectionScenario.receiverWithProfile:
-        targetPage = const ReceiverDashboardPage(initialIndex: 0);
-        break;
-      case ConnectionScenario.senderWithoutProfile:
-        targetPage = const SenderRegistrationPage();
-        break;
-      case ConnectionScenario.receiverWithoutProfile:
-        targetPage = const ReceiverRegistrationPage();
-        break;
-      case ConnectionScenario.noDevice:
-        return;
-    }
-    if (hasInternet) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => targetPage),
-      );
-    } else {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => WifiSelectionPage(targetPage: targetPage),
-        ),
-      );
-    }
+  }
+
+  static Future<void> _showNoProfileDialog(
+    BuildContext context,
+    bool isSender,
+  ) {
+    final title = isSender
+        ? 'No existing sender profile found'
+        : 'No existing receiver profile found';
+    final buttonLabel = isSender ? 'Register Sender' : 'Register Receiver';
+    final description = isSender
+        ? 'Please register by creating a new sender profile to proceed.'
+        : 'Please register by creating a new receiver profile to proceed.';
+
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 0),
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    description,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF2D92D2),
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => isSender
+                                ? const SenderRegistrationPage()
+                                : const ReceiverRegistrationPage(),
+                          ),
+                        );
+                      },
+                      child: Text(buttonLabel),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'If you have an existing profile, go to the profile page to edit.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildBackground(BuildContext context) {
@@ -388,27 +648,6 @@ class HomePage extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _ScenarioButton extends StatelessWidget {
-  const _ScenarioButton({required this.label, required this.onTap});
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: TextButton(
-        onPressed: onTap,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Text(label, style: const TextStyle(fontSize: 13)),
-        ),
-      ),
     );
   }
 }

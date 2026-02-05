@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'receiver_dashboard_page.dart';
+import '../screens/wifi_selection_page.dart';
 
 /// Receiver device registration page (no existing profile).
 class ReceiverRegistrationPage extends StatelessWidget {
@@ -38,7 +38,9 @@ class ReceiverRegistrationPage extends StatelessWidget {
               FilledButton(
                 onPressed: () {
                   Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const ReceiverDashboardPage()),
+                    MaterialPageRoute(
+                      builder: (_) => const WifiSelectionPage(),
+                    ),
                   );
                 },
                 child: const Text('Finish registration'),
